@@ -1,49 +1,57 @@
-const express = require("express");
-const uuid = require("uuid");
+import express from "express";
+import { MongoClient, ObjectId } from "mongodb";
 
-const app = express();
-app.use(express.json());
+const start = async () => {
+  const client = await MongoClient.connect(
+    "mongodb://localhost:27017/fsr-todos",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    },
+  );
+  const db = client.db("fsr-todos");
 
-let fakeTodos = [
-  {
-    id: "123",
-    text: "Go to the grocerty store",
-    isCompleted: false,
-  },
-  {
-    id: "234",
-    text: "Learn full-stack development",
-    isCompleted: true,
-  },
-];
+  const app = express();
+  app.use(express.json());
 
-app.get("/todos", (req, res) => {
-  res.send(fakeTodos);
-});
+  app.get("/todos", async (req, res) => {
+    const todos = await db.collection("todos").find({}).toArray();
+    res.json(todos);
+  });
 
-app.post("/todos", (req, res) => {
-  const newTodoText = req.body.newTodoText;
-  const newTodo = {
-    id: uuid.v4(),
-    text: newTodoText,
-    isCompleted: false,
-  };
-  fakeTodos.push(newTodo);
-  res.json(newTodo);
-});
+  app.post("/todos", async (req, res) => {
+    const newTodoText = req.body.newTodoText;
+    const newTodo = {
+      text: newTodoText,
+      isCompleted: false,
+    };
+    const result = await db.collection("todos").insertOne(newTodo);
+    res.json({ ...newTodo, _id: result.insertedId });
+  });
 
-app.delete("/todos/:todoId", (req, res) => {
-  const todoId = req.params.todoId;
-  fakeTodos = fakeTodos.filter((todo) => todo.id !== todoId);
-  res.json(fakeTodos);
-});
+  app.delete("/todos/:todoId", async (req, res) => {
+    const todoId = req.params.todoId;
+    await db.collection("todos").deleteOne({ _id: new ObjectId(todoId) });
+    const todos = await db.collection("todos").find({}).toArray();
+    res.json(todos);
+  });
 
-app.put("/todos/:todoId", (req, res) => {
-  const todoId = req.params.todoId;
-  fakeTodos.find((todo) => todo.id === todoId).isCompleted = true;
-  res.json(fakeTodos);
-});
+  app.put("/todos/:todoId", async (req, res) => {
+    const todoId = req.params.todoId;
+    await db.collection("todos").updateOne(
+      { _id: new ObjectId(todoId) },
+      {
+        $set: { isCompleted: true },
+      },
+    );
 
-app.listen(8080, () => {
-  console.log("Sever is listening on port 8080");
-});
+    const todos = await db.collection("todos").find({}).toArray();
+    res.json(todos);
+  });
+
+  app.listen(8080, () => {
+    console.log("Sever is listening on port 8080");
+  });
+};
+
+start();
